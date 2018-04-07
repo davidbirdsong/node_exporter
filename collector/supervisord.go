@@ -16,6 +16,11 @@
 package collector
 
 import (
+	"context"
+	"net"
+	"net/http"
+	"net/url"
+
 	"github.com/kolo/xmlrpc"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/log"
@@ -40,7 +45,24 @@ func init() {
 
 // NewSupervisordCollector returns a new Collector exposing supervisord statistics.
 func NewSupervisordCollector() (Collector, error) {
-	client, err := xmlrpc.NewClient(*supervisordURL, nil)
+	surl, err := url.Parse(*supervisordURL)
+	if err != nil {
+		return nil, err
+	}
+	var tr *http.Transport
+	if surl.Scheme == "unix" {
+
+		scheme := surl.Scheme
+		tr = http.Transport{
+			DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
+				return net.Dial(scheme, surl.Path)
+			},
+		}
+		surl.Host = "supervisor"
+		surl.Scheme = "http"
+	}
+
+	client, err := xmlrpc.NewClient(surl.String(), tr)
 	if err != nil {
 		return nil, err
 	}
